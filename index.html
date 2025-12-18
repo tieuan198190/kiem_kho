@@ -330,6 +330,31 @@
       padding: 0 4px;
       animation: fadeUp 0.4s ease;
     }
+    .zoom-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .mini-btn {
+      border-radius: 999px;
+      padding: 10px 14px;
+      font-size: 0.92rem;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--text);
+      box-shadow: 0 10px 18px rgba(15, 23, 42, 0.08);
+    }
+    .mini-btn[aria-pressed="true"] {
+      background: var(--primary);
+      color: #fff;
+      border-color: transparent;
+      box-shadow: 0 12px 25px rgba(15, 23, 42, 0.18);
+    }
+    #torchBtn {
+      display: none;
+    }
     .zoom-label {
       display: flex;
       justify-content: space-between;
@@ -385,8 +410,14 @@
             <span>Max</span>
           </div>
           <input type="range" id="zoomSlider" min="1" max="5" step="0.1">
+          <div class="zoom-actions">
+            <button class="mini-btn" id="zoom1xBtn" type="button">1x</button>
+            <button class="mini-btn" id="zoom2xBtn" type="button">2x</button>
+            <button class="mini-btn" id="zoom3xBtn" type="button">3x</button>
+            <button class="mini-btn" id="torchBtn" type="button">Bật đèn</button>
+          </div>
         </div>
-        <div class="helper">Lưu ý Safari iPhone: cho phép quyền camera khi được hỏi, sau đó quay lại bấm “Bật camera”.</div>
+        <div class="helper">Mẹo: QR nhỏ quá thì tăng Zoom (nếu hiện) và bật đèn; tránh chói do nilon, giữ máy chắc và đưa QR vào giữa khung.</div>
         <div class="controls">
           <button id="startBtn">Bật camera</button>
           <button id="stopBtn">Tắt camera</button>
@@ -432,11 +463,18 @@
     const scanFeedback = document.getElementById('scanFeedback');
     const zoomControls = document.getElementById('zoomControls');
     const zoomSlider = document.getElementById('zoomSlider');
+    const zoom1xBtn = document.getElementById('zoom1xBtn');
+    const zoom2xBtn = document.getElementById('zoom2xBtn');
+    const zoom3xBtn = document.getElementById('zoom3xBtn');
+    const torchBtn = document.getElementById('torchBtn');
     let emptyRow = document.getElementById('emptyRow');
 
     let qr = null;
     let totalScans = 0;
     let feedbackTimer = null;
+    let zoomCapabilities = null;
+    let torchSupported = false;
+    let torchOn = false;
 
     // chống quét trùng do rung tay
     let lastCode = null;
@@ -546,34 +584,101 @@
       try {
         await requestCameraPermission();
         const cams = await Html5Qrcode.getCameras();
-        const backCam = cams.find(c => /back|rear/i.test(c.label)) || cams[0];
+        const backCam =
+          cams.find(c => /back|rear|environment/i.test(c.label)) ||
+          cams[cams.length - 1] ||
+          cams[0];
 
         await qr.start(
           backCam.id,
-          { fps: 12, qrbox: { width: 260, height: 260 } },
+          {
+            fps: 15,
+            qrbox: { width: 220, height: 220 },
+            disableFlip: true,
+            experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+            videoConstraints: {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 }
+            }
+          },
           onScanSuccess
         );
 
-        // Setup Zoom if supported
+        // Setup Zoom / Torch if supported
         try {
           const capabilities = qr.getRunningTrackCameraCapabilities();
           const settings = qr.getRunningTrackSettings();
           
-          if (capabilities.zoom) {
+          zoomCapabilities = capabilities?.zoom || null;
+          torchSupported = !!capabilities?.torch;
+          torchOn = false;
+
+          const setPressed = (btn, pressed) => {
+            if (!btn) return;
+            btn.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+          };
+
+          const applyZoom = async (value) => {
+            if (!zoomCapabilities) return;
+            try {
+              const clamped = Math.min(zoomCapabilities.max, Math.max(zoomCapabilities.min, value));
+              zoomSlider.value = String(clamped);
+              await qr.applyVideoConstraints({ advanced: [{ zoom: clamped }] });
+              setPressed(zoom1xBtn, Math.abs(clamped - 1) < 0.15);
+              setPressed(zoom2xBtn, Math.abs(clamped - 2) < 0.15);
+              setPressed(zoom3xBtn, Math.abs(clamped - 3) < 0.15);
+            } catch (e) {
+              // ignore if browser blocks zoom constraints
+            }
+          };
+
+          if (zoomCapabilities) {
             zoomControls.style.display = 'block';
-            zoomSlider.min = capabilities.zoom.min;
-            zoomSlider.max = capabilities.zoom.max;
-            zoomSlider.step = capabilities.zoom.step;
-            zoomSlider.value = settings.zoom || capabilities.zoom.min;
+            zoomSlider.min = zoomCapabilities.min;
+            zoomSlider.max = zoomCapabilities.max;
+            zoomSlider.step = zoomCapabilities.step || 0.1;
+            zoomSlider.value = settings.zoom || zoomCapabilities.min;
             
             zoomSlider.oninput = () => {
               qr.applyVideoConstraints({
                 advanced: [{ zoom: parseFloat(zoomSlider.value) }]
-              });
+              }).catch(() => {});
             };
+
+            zoom1xBtn.onclick = () => applyZoom(1);
+            zoom2xBtn.onclick = () => applyZoom(2);
+            zoom3xBtn.onclick = () => applyZoom(3);
+
+            setPressed(zoom1xBtn, true);
+            setPressed(zoom2xBtn, false);
+            setPressed(zoom3xBtn, false);
+          } else {
+            zoomControls.style.display = 'none';
+          }
+
+          if (torchSupported) {
+            torchBtn.style.display = 'inline-flex';
+            torchBtn.setAttribute('aria-pressed', 'false');
+            torchBtn.onclick = async () => {
+              try {
+                torchOn = !torchOn;
+                await qr.applyVideoConstraints({ advanced: [{ torch: torchOn }] });
+                torchBtn.textContent = torchOn ? "Tắt đèn" : "Bật đèn";
+                torchBtn.setAttribute('aria-pressed', torchOn ? 'true' : 'false');
+              } catch (e) {
+                torchOn = false;
+                torchBtn.textContent = "Bật đèn";
+                torchBtn.style.display = 'none';
+              }
+            };
+          } else {
+            torchBtn.style.display = 'none';
           }
         } catch (e) {
-          console.log("Zoom setup failed", e);
+          console.log("Zoom/torch setup failed", e);
+          zoomControls.style.display = 'none';
+          torchBtn.style.display = 'none';
         }
 
         statusEl.textContent = "✅ Camera đã bật, đưa QR vào khung để quét";
@@ -589,6 +694,10 @@
         await qr.stop();
         await qr.clear();
         zoomControls.style.display = 'none';
+        torchBtn.style.display = 'none';
+        torchBtn.textContent = "Bật đèn";
+        torchBtn.setAttribute('aria-pressed', 'false');
+        torchOn = false;
       } finally {
         qr = null;
         statusEl.textContent = "Đã tắt camera";
