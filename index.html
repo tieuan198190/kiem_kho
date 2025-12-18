@@ -9,17 +9,16 @@
 
     :root {
       color-scheme: light;
-      --bg: #f7f8fc;
-      --bg-accent: radial-gradient(circle at top, rgba(255, 255, 255, 0.9), transparent 60%);
+      --bg: #f5f6fb;
       --card: #ffffff;
-      --card-shadow: 0 20px 70px rgba(15, 23, 42, 0.08);
-      --border: #e4e7f1;
-      --text: #121826;
-      --muted: #6b7287;
-      --muted-2: #9aa1b7;
-      --primary: #121826;
-      --secondary: #f2f4fb;
-      --accent: #2f67ff;
+      --card-shadow: 0 25px 50px rgba(15, 23, 42, 0.08);
+      --border: #e4e7f2;
+      --text: #0f172a;
+      --muted: #6b7280;
+      --muted-2: #a0a5b8;
+      --primary: #0f172a;
+      --secondary: #f6f7fb;
+      --accent: #1d3fff;
       --radius-lg: 26px;
       --radius-md: 18px;
     }
@@ -34,18 +33,18 @@
       min-height: 100vh;
       font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
       background: var(--bg);
-      background-image: var(--bg-accent);
       color: var(--text);
       display: flex;
       justify-content: center;
-      padding: clamp(20px, 5vw, 60px);
+      padding: clamp(16px, 4vw, 56px);
     }
 
     main {
       width: min(1180px, 100%);
       display: flex;
       flex-direction: column;
-      gap: 24px;
+      gap: clamp(18px, 4vw, 28px);
+      animation: fadeIntro 0.6s ease;
     }
 
     .app-header {
@@ -53,6 +52,7 @@
       padding: clamp(26px, 4vw, 42px);
       background: var(--card);
       box-shadow: var(--card-shadow);
+      animation: cardPop 0.7s ease both;
     }
 
     .brand {
@@ -62,6 +62,7 @@
       font-weight: 600;
       margin-bottom: 20px;
     }
+
     .brand::before {
       content: '';
       width: 8px;
@@ -76,17 +77,10 @@
       font-size: clamp(2rem, 6vw, 3.4rem);
       font-weight: 700;
     }
-    .app-header p {
-      margin: 12px 0 0;
-      color: var(--muted);
-      max-width: 520px;
-      font-size: 1rem;
-    }
-
     .cards {
       display: grid;
       grid-template-columns: 0.92fr 1.08fr;
-      gap: 26px;
+      gap: clamp(18px, 3vw, 28px);
     }
     @media (max-width: 980px) {
       .cards {
@@ -97,9 +91,13 @@
     .card {
       background: var(--card);
       border-radius: var(--radius-lg);
-      padding: clamp(20px, 3vw, 32px);
+      padding: clamp(20px, 4vw, 32px);
       box-shadow: var(--card-shadow);
-      border: 1px solid rgba(255, 255, 255, 0.8);
+      border: 1px solid var(--border);
+      animation: cardPop 0.8s ease both;
+    }
+    .cards .card:nth-child(2) {
+      animation-delay: 0.1s;
     }
     .card-title {
       font-size: 1.35rem;
@@ -111,10 +109,13 @@
       font-size: 0.95rem;
     }
 
+    .reader-wrapper {
+      position: relative;
+    }
     #reader {
       width: 100%;
       border-radius: var(--radius-md);
-      border: 1px dashed var(--border);
+      border: 1px dashed rgba(15, 23, 42, 0.12);
       min-height: clamp(280px, 32vw, 360px);
       display: flex;
       align-items: center;
@@ -122,6 +123,39 @@
       color: var(--muted-2);
       background: var(--secondary);
       overflow: hidden;
+    }
+    .scan-feedback {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: rgba(247, 248, 252, 0.88);
+      border-radius: var(--radius-md);
+      opacity: 0;
+      transform: scale(0.95);
+      transition: opacity 180ms ease, transform 180ms ease;
+      pointer-events: none;
+      color: #0f172a;
+      font-weight: 600;
+    }
+    .scan-feedback.show {
+      opacity: 1;
+      transform: scale(1);
+    }
+    .check-circle {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: #22c55e;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      box-shadow: 0 12px 28px rgba(34, 197, 94, 0.25);
     }
 
     .helper {
@@ -149,9 +183,10 @@
       transform: scale(0.97);
     }
     #startBtn {
-      background: #121826;
+      background: var(--primary);
       color: #fff;
-      box-shadow: 0 12px 32px rgba(18, 24, 38, 0.2);
+      box-shadow: 0 12px 25px rgba(15, 23, 42, 0.2);
+      animation: pulseBtn 2.6s ease-in-out infinite;
     }
     #stopBtn {
       background: #fff;
@@ -206,6 +241,73 @@
     tbody tr:last-child td {
       border-bottom: none;
     }
+    .log-entry {
+      animation: fadeUp 0.35s ease;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeIntro {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes cardPop {
+      0% { opacity: 0; transform: translateY(20px) scale(0.98); }
+      60% { opacity: 1; transform: translateY(-4px) scale(1.01); }
+      100% { transform: translateY(0) scale(1); }
+    }
+
+    @keyframes pulseBtn {
+      0% { box-shadow: 0 12px 25px rgba(15, 23, 42, 0.2); transform: translateY(0); }
+      50% { box-shadow: 0 18px 40px rgba(15, 23, 42, 0.25); transform: translateY(-2px); }
+      100% { box-shadow: 0 12px 25px rgba(15, 23, 42, 0.2); transform: translateY(0); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    @media (max-width: 640px) {
+      body {
+        padding: 16px;
+      }
+      .app-header {
+        padding: 22px;
+        border-radius: 20px;
+      }
+      h1 {
+        font-size: 2.1rem;
+      }
+      .cards {
+        gap: 18px;
+      }
+      .card {
+        padding: 20px;
+        border-radius: 20px;
+      }
+      #reader {
+        min-height: 240px;
+      }
+      .controls {
+        flex-direction: column;
+      }
+      .controls button {
+        width: 100%;
+      }
+      table {
+        font-size: 0.9rem;
+      }
+      th, td {
+        padding: 12px 14px;
+      }
+    }
     .table-empty {
       text-align: center;
       color: var(--muted);
@@ -219,6 +321,7 @@
       background: var(--secondary);
       color: var(--accent);
       font-weight: 600;
+      border: 1px solid var(--border);
     }
   </style>
 </head>
@@ -231,7 +334,14 @@
 
     <section class="cards">
       <article class="card camera-card">
-        <div id="reader">Camera sẽ hiển thị ở đây sau khi bật.</div>
+        <div class="card-title">Khu vực camera</div>
+        <div class="reader-wrapper">
+          <div id="reader">Camera sẽ hiển thị ở đây sau khi bật.</div>
+          <div class="scan-feedback" id="scanFeedback">
+            <div class="check-circle">✓</div>
+            <div>Đã quét xong</div>
+          </div>
+        </div>
         <div class="helper">Lưu ý Safari iPhone: cho phép quyền camera khi được hỏi, sau đó quay lại bấm “Bật camera”.</div>
         <div class="controls">
           <button id="startBtn">Bật camera</button>
@@ -275,10 +385,12 @@
     const stopBtn = document.getElementById('stopBtn');
     const scanCountEl = document.getElementById('scanCount');
     const logBody = document.getElementById('logBody');
+    const scanFeedback = document.getElementById('scanFeedback');
     let emptyRow = document.getElementById('emptyRow');
 
     let qr = null;
     let totalScans = 0;
+    let feedbackTimer = null;
 
     // chống quét trùng do rung tay
     let lastCode = null;
@@ -337,6 +449,15 @@
       }
     }
 
+    function showScanFeedback() {
+      if (!scanFeedback) return;
+      scanFeedback.classList.add('show');
+      clearTimeout(feedbackTimer);
+      feedbackTimer = setTimeout(() => {
+        scanFeedback.classList.remove('show');
+      }, 1100);
+    }
+
     async function sendToN8n(code) {
       const payload = {
         code,                          // nội dung QR
@@ -367,6 +488,7 @@
       totalScans += 1;
       scanCountEl.textContent = totalScans + " dòng";
       addLogEntry(decodedText);
+      showScanFeedback();
 
       sendToN8n(decodedText);
     }
