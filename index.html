@@ -164,12 +164,44 @@
       color: var(--muted-2);
     }
 
-    .controls {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-      margin-top: 22px;
-    }
+	    .controls {
+	      display: flex;
+	      gap: 12px;
+	      flex-wrap: wrap;
+	      margin-top: 22px;
+	    }
+	    .settings {
+	      margin-top: 14px;
+	      display: flex;
+	      gap: 14px;
+	      flex-wrap: wrap;
+	      align-items: center;
+	      color: var(--muted);
+	      font-size: 0.92rem;
+	    }
+	    .settings label {
+	      display: inline-flex;
+	      align-items: center;
+	      gap: 10px;
+	      padding: 10px 12px;
+	      border-radius: 999px;
+	      background: var(--secondary);
+	      border: 1px solid var(--border);
+	      user-select: none;
+	    }
+	    .settings input[type="checkbox"] {
+	      width: 18px;
+	      height: 18px;
+	      accent-color: var(--accent);
+	    }
+	    .zoom-control input[type="range"] {
+	      width: 140px;
+	    }
+	    .zoom-value {
+	      font-variant-numeric: tabular-nums;
+	      color: var(--text);
+	      font-weight: 600;
+	    }
     button {
       border: none;
       border-radius: 999px;
@@ -341,12 +373,23 @@
             <div class="check-circle">✓</div>
             <div>Đã quét xong</div>
           </div>
-        </div>
-        <div class="helper">Lưu ý Safari iPhone: cho phép quyền camera khi được hỏi, sau đó quay lại bấm “Bật camera”.</div>
-        <div class="controls">
-          <button id="startBtn">Bật camera</button>
-          <button id="stopBtn">Tắt camera</button>
-        </div>
+	        </div>
+	        <div class="helper">Lưu ý Safari iPhone: cho phép quyền camera khi được hỏi, sau đó quay lại bấm “Bật camera”.</div>
+	        <div class="settings">
+	          <label>
+	            <input type="checkbox" id="highSensitivity" checked />
+	            <span>Nhạy cao (QR nhỏ/xa)</span>
+	          </label>
+	          <label class="zoom-control" id="zoomWrap" hidden>
+	            <span>Zoom</span>
+	            <input type="range" id="zoom" min="1" max="1" step="0.1" value="1" />
+	            <span class="zoom-value" id="zoomVal">1.0×</span>
+	          </label>
+	        </div>
+	        <div class="controls">
+	          <button id="startBtn">Bật camera</button>
+	          <button id="stopBtn">Tắt camera</button>
+	        </div>
       </article>
 
       <article class="card data-card">
@@ -381,16 +424,21 @@
   <script>
     const WEBHOOK_URL = "https://n8n-hongnhung198198-u40833.vm.elestio.app/webhook/kiem_khoCM";
     const statusEl = document.getElementById('status');
-    const startBtn = document.getElementById('startBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    const scanCountEl = document.getElementById('scanCount');
-    const logBody = document.getElementById('logBody');
-    const scanFeedback = document.getElementById('scanFeedback');
-    let emptyRow = document.getElementById('emptyRow');
+	    const startBtn = document.getElementById('startBtn');
+	    const stopBtn = document.getElementById('stopBtn');
+	    const highSensitivityEl = document.getElementById('highSensitivity');
+	    const zoomWrapEl = document.getElementById('zoomWrap');
+	    const zoomEl = document.getElementById('zoom');
+	    const zoomValEl = document.getElementById('zoomVal');
+	    const scanCountEl = document.getElementById('scanCount');
+	    const logBody = document.getElementById('logBody');
+	    const scanFeedback = document.getElementById('scanFeedback');
+	    let emptyRow = document.getElementById('emptyRow');
 
-    let qr = null;
-    let totalScans = 0;
-    let feedbackTimer = null;
+	    let qr = null;
+	    let activeTrack = null;
+	    let totalScans = 0;
+	    let feedbackTimer = null;
 
     // chống quét trùng do rung tay
     let lastCode = null;
@@ -478,7 +526,7 @@
       }
     }
 
-    function onScanSuccess(decodedText) {
+	    function onScanSuccess(decodedText) {
       const now = Date.now();
       if (decodedText === lastCode && (now - lastTs) < DEDUPE_MS) return;
 
@@ -491,43 +539,126 @@
       showScanFeedback();
 
       sendToN8n(decodedText);
-    }
+	    }
 
-    async function start() {
-      if (qr) return;
-      qr = new Html5Qrcode("reader");
+	    function clamp(value, min, max) {
+	      return Math.max(min, Math.min(max, value));
+	    }
 
-      try {
-        await requestCameraPermission();
-        const cams = await Html5Qrcode.getCameras();
-        const backCam = cams.find(c => /back|rear/i.test(c.label)) || cams[0];
+	    function buildScannerConfig(highSensitivity) {
+	      return {
+	        fps: highSensitivity ? 24 : 12,
+	        qrbox: (viewfinderWidth, viewfinderHeight) => {
+	          const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+	          const ratio = highSensitivity ? 0.82 : 0.72;
+	          const raw = Math.floor(minEdge * ratio);
+	          const size = clamp(raw, highSensitivity ? 220 : 200, highSensitivity ? 440 : 320);
+	          return { width: size, height: size };
+	        },
+	        experimentalFeatures: {
+	          useBarCodeDetectorIfSupported: true,
+	        },
+	      };
+	    }
 
-        await qr.start(
-          backCam.id,
-          { fps: 12, qrbox: { width: 260, height: 260 } },
-          onScanSuccess
-        );
+	    function buildCameraConstraints(highSensitivity) {
+	      return {
+	        facingMode: { ideal: "environment" },
+	        width: { ideal: highSensitivity ? 1920 : 1280 },
+	        height: { ideal: highSensitivity ? 1080 : 720 },
+	      };
+	    }
 
-        statusEl.textContent = "✅ Camera đã bật, đưa QR vào khung để quét";
-      } catch (err) {
-        statusEl.textContent = "❌ Không mở được camera: " + err;
-        qr = null;
-      }
-    }
+	    async function applyVideoEnhancements() {
+	      try {
+	        const video = document.querySelector('#reader video');
+	        const track = video?.srcObject?.getVideoTracks?.()?.[0];
+	        if (!track?.applyConstraints) return;
+	        activeTrack = track;
 
-    async function stop() {
-      if (!qr) return;
-      try {
-        await qr.stop();
-        await qr.clear();
-      } finally {
-        qr = null;
-        statusEl.textContent = "Đã tắt camera";
-      }
-    }
+	        const caps = track.getCapabilities?.() || {};
+	        const advanced = [];
+	        if (Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')) {
+	          advanced.push({ focusMode: 'continuous' });
+	        }
 
-    startBtn.onclick = start;
-    stopBtn.onclick = stop;
-  </script>
-</body>
-</html>
+	        if (caps.zoom && typeof caps.zoom.min === 'number' && typeof caps.zoom.max === 'number') {
+	          if (!zoomWrapEl || !zoomEl || !zoomValEl) return;
+	          zoomWrapEl.hidden = false;
+	          zoomEl.min = String(caps.zoom.min);
+	          zoomEl.max = String(caps.zoom.max);
+	          zoomEl.step = String(caps.zoom.step ?? 0.1);
+	          const initial = caps.zoom.min;
+	          zoomEl.value = String(initial);
+	          zoomValEl.textContent = Number(initial).toFixed(1) + "×";
+	          advanced.push({ zoom: initial });
+	        } else {
+	          if (zoomWrapEl) zoomWrapEl.hidden = true;
+	        }
+
+	        if (advanced.length) {
+	          await track.applyConstraints({ advanced });
+	        }
+	      } catch (_) {
+	        // bỏ qua nếu thiết bị/trình duyệt không hỗ trợ
+	      }
+	    }
+
+	    async function setZoom(value) {
+	      try {
+	        if (!activeTrack?.applyConstraints) return;
+	        const caps = activeTrack.getCapabilities?.() || {};
+	        if (!caps.zoom) return;
+	        const zoomValue = clamp(Number(value), caps.zoom.min, caps.zoom.max);
+	        await activeTrack.applyConstraints({ advanced: [{ zoom: zoomValue }] });
+	        zoomValEl.textContent = zoomValue.toFixed(1) + "×";
+	      } catch (_) {}
+	    }
+
+	    async function start() {
+	      if (qr) return;
+	      qr = new Html5Qrcode("reader");
+
+	      try {
+	        await requestCameraPermission();
+	        const highSensitivity = !!highSensitivityEl?.checked;
+	        const scannerConfig = buildScannerConfig(highSensitivity);
+	        const cameraConstraints = buildCameraConstraints(highSensitivity);
+	        const onScanFailure = () => {};
+
+	        try {
+	          await qr.start(cameraConstraints, scannerConfig, onScanSuccess, onScanFailure);
+	        } catch (_) {
+	          const cams = await Html5Qrcode.getCameras();
+	          const backCam = cams.find(c => /back|rear/i.test(c.label)) || cams[0];
+	          await qr.start(backCam.id, scannerConfig, onScanSuccess, onScanFailure);
+	        }
+
+	        await applyVideoEnhancements();
+
+	        statusEl.textContent = "✅ Camera đã bật, đưa QR vào khung để quét";
+	      } catch (err) {
+	        statusEl.textContent = "❌ Không mở được camera: " + err;
+	        qr = null;
+	      }
+	    }
+
+	    async function stop() {
+	      if (!qr) return;
+	      try {
+	        await qr.stop();
+	        await qr.clear();
+	      } finally {
+	        qr = null;
+	        activeTrack = null;
+	        if (zoomWrapEl) zoomWrapEl.hidden = true;
+	        statusEl.textContent = "Đã tắt camera";
+	      }
+	    }
+
+	    startBtn.onclick = start;
+	    stopBtn.onclick = stop;
+	    zoomEl?.addEventListener('input', (e) => setZoom(e.target.value));
+	  </script>
+	</body>
+	</html>
