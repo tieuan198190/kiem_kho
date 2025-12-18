@@ -164,44 +164,12 @@
       color: var(--muted-2);
     }
 
-	    .controls {
-	      display: flex;
-	      gap: 12px;
-	      flex-wrap: wrap;
-	      margin-top: 22px;
-	    }
-	    .settings {
-	      margin-top: 14px;
-	      display: flex;
-	      gap: 14px;
-	      flex-wrap: wrap;
-	      align-items: center;
-	      color: var(--muted);
-	      font-size: 0.92rem;
-	    }
-	    .settings label {
-	      display: inline-flex;
-	      align-items: center;
-	      gap: 10px;
-	      padding: 10px 12px;
-	      border-radius: 999px;
-	      background: var(--secondary);
-	      border: 1px solid var(--border);
-	      user-select: none;
-	    }
-	    .settings input[type="checkbox"] {
-	      width: 18px;
-	      height: 18px;
-	      accent-color: var(--accent);
-	    }
-	    .zoom-control input[type="range"] {
-	      width: 140px;
-	    }
-	    .zoom-value {
-	      font-variant-numeric: tabular-nums;
-	      color: var(--text);
-	      font-weight: 600;
-	    }
+    .controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 22px;
+    }
     button {
       border: none;
       border-radius: 999px;
@@ -373,23 +341,12 @@
             <div class="check-circle">✓</div>
             <div>Đã quét xong</div>
           </div>
-	        </div>
-	        <div class="helper">Lưu ý Safari iPhone: cho phép quyền camera khi được hỏi, sau đó quay lại bấm “Bật camera”.</div>
-	        <div class="settings">
-	          <label>
-	            <input type="checkbox" id="highSensitivity" checked />
-	            <span>Nhạy cao (QR nhỏ/xa)</span>
-	          </label>
-	          <label class="zoom-control" id="zoomWrap" hidden>
-	            <span>Zoom</span>
-	            <input type="range" id="zoom" min="1" max="1" step="0.1" value="1" />
-	            <span class="zoom-value" id="zoomVal">1.0×</span>
-	          </label>
-	        </div>
-	        <div class="controls">
-	          <button id="startBtn">Bật camera</button>
-	          <button id="stopBtn">Tắt camera</button>
-	        </div>
+        </div>
+        <div class="helper">Lưu ý Safari iPhone: cho phép quyền camera khi được hỏi, sau đó quay lại bấm “Bật camera”.</div>
+        <div class="controls">
+          <button id="startBtn">Bật camera</button>
+          <button id="stopBtn">Tắt camera</button>
+        </div>
       </article>
 
       <article class="card data-card">
@@ -424,22 +381,16 @@
   <script>
     const WEBHOOK_URL = "https://n8n-hongnhung198198-u40833.vm.elestio.app/webhook/kiem_khoCM";
     const statusEl = document.getElementById('status');
-	    const startBtn = document.getElementById('startBtn');
-	    const stopBtn = document.getElementById('stopBtn');
-	    const highSensitivityEl = document.getElementById('highSensitivity');
-	    const zoomWrapEl = document.getElementById('zoomWrap');
-	    const zoomEl = document.getElementById('zoom');
-	    const zoomValEl = document.getElementById('zoomVal');
-	    const scanCountEl = document.getElementById('scanCount');
-	    const logBody = document.getElementById('logBody');
-	    const scanFeedback = document.getElementById('scanFeedback');
-	    let emptyRow = document.getElementById('emptyRow');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const scanCountEl = document.getElementById('scanCount');
+    const logBody = document.getElementById('logBody');
+    const scanFeedback = document.getElementById('scanFeedback');
+    let emptyRow = document.getElementById('emptyRow');
 
-	    let qr = null;
-	    let activeTrack = null;
-	    let totalScans = 0;
-	    let feedbackTimer = null;
-	    let opChain = Promise.resolve();
+    let qr = null;
+    let totalScans = 0;
+    let feedbackTimer = null;
 
     // chống quét trùng do rung tay
     let lastCode = null;
@@ -455,37 +406,12 @@
 
     let permissionGranted = false;
 
-    function formatErr(err) {
-      if (!err) return "Lỗi không xác định";
-      if (typeof err === "string") return err;
-      const name = err?.name;
-      const message = err?.message ?? String(err);
-      return name ? `${name}: ${message}` : message;
-    }
-
-    function assertSecureContextForCamera() {
-      const isLocalhost =
-        location.hostname === "localhost" || location.hostname === "127.0.0.1";
-      if (!window.isSecureContext && !isLocalhost) {
-        throw new Error("Safari chỉ cho phép mở camera trên HTTPS (hoặc localhost).");
-      }
-    }
-
     async function requestCameraPermission() {
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error("Trình duyệt không hỗ trợ camera.");
       }
       if (!isIosSafari || permissionGranted) return;
-      assertSecureContextForCamera();
-
-      let stream = null;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-        });
-      } catch (_) {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      }
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } });
       stream.getTracks().forEach(track => track.stop());
       permissionGranted = true;
     }
@@ -552,7 +478,7 @@
       }
     }
 
-	    function onScanSuccess(decodedText) {
+    function onScanSuccess(decodedText) {
       const now = Date.now();
       if (decodedText === lastCode && (now - lastTs) < DEDUPE_MS) return;
 
@@ -565,152 +491,43 @@
       showScanFeedback();
 
       sendToN8n(decodedText);
-	    }
+    }
 
-	    function clamp(value, min, max) {
-	      return Math.max(min, Math.min(max, value));
-	    }
+    async function start() {
+      if (qr) return;
+      qr = new Html5Qrcode("reader");
 
-	    function buildScannerConfig(highSensitivity) {
-	      return {
-	        fps: highSensitivity ? 24 : 12,
-	        qrbox: (viewfinderWidth, viewfinderHeight) => {
-	          const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-	          const ratio = highSensitivity ? 0.82 : 0.72;
-	          const raw = Math.floor(minEdge * ratio);
-	          const size = clamp(raw, highSensitivity ? 220 : 200, highSensitivity ? 440 : 320);
-	          return { width: size, height: size };
-	        },
-	        experimentalFeatures: {
-	          useBarCodeDetectorIfSupported: true,
-	        },
-	      };
-	    }
+      try {
+        await requestCameraPermission();
+        const cams = await Html5Qrcode.getCameras();
+        const backCam = cams.find(c => /back|rear/i.test(c.label)) || cams[0];
 
-	    function buildCameraConstraints(highSensitivity) {
-	      return {
-	        facingMode: { ideal: "environment" },
-	        width: { ideal: highSensitivity ? 1920 : 1280 },
-	        height: { ideal: highSensitivity ? 1080 : 720 },
-	      };
-	    }
+        await qr.start(
+          backCam.id,
+          { fps: 12, qrbox: { width: 260, height: 260 } },
+          onScanSuccess
+        );
 
-	    async function applyVideoEnhancements() {
-	      try {
-	        const video = document.querySelector('#reader video');
-	        if (video) {
-	          video.setAttribute('playsinline', '');
-	          video.playsInline = true;
-	          video.muted = true;
-	          video.autoplay = true;
-	        }
-	        const track = video?.srcObject?.getVideoTracks?.()?.[0];
-	        if (!track?.applyConstraints) return;
-	        activeTrack = track;
+        statusEl.textContent = "✅ Camera đã bật, đưa QR vào khung để quét";
+      } catch (err) {
+        statusEl.textContent = "❌ Không mở được camera: " + err;
+        qr = null;
+      }
+    }
 
-	        const caps = track.getCapabilities?.() || {};
-	        const advanced = [];
-	        if (Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')) {
-	          advanced.push({ focusMode: 'continuous' });
-	        }
+    async function stop() {
+      if (!qr) return;
+      try {
+        await qr.stop();
+        await qr.clear();
+      } finally {
+        qr = null;
+        statusEl.textContent = "Đã tắt camera";
+      }
+    }
 
-	        if (caps.zoom && typeof caps.zoom.min === 'number' && typeof caps.zoom.max === 'number') {
-	          if (!zoomWrapEl || !zoomEl || !zoomValEl) return;
-	          zoomWrapEl.hidden = false;
-	          zoomEl.min = String(caps.zoom.min);
-	          zoomEl.max = String(caps.zoom.max);
-	          zoomEl.step = String(caps.zoom.step ?? 0.1);
-	          const initial = caps.zoom.min;
-	          zoomEl.value = String(initial);
-	          zoomValEl.textContent = Number(initial).toFixed(1) + "×";
-	          advanced.push({ zoom: initial });
-	        } else {
-	          if (zoomWrapEl) zoomWrapEl.hidden = true;
-	        }
-
-	        if (advanced.length) {
-	          await track.applyConstraints({ advanced });
-	        }
-	      } catch (_) {
-	        // bỏ qua nếu thiết bị/trình duyệt không hỗ trợ
-	      }
-	    }
-
-	    async function setZoom(value) {
-	      try {
-	        if (!activeTrack?.applyConstraints) return;
-	        const caps = activeTrack.getCapabilities?.() || {};
-	        if (!caps.zoom) return;
-	        const zoomValue = clamp(Number(value), caps.zoom.min, caps.zoom.max);
-	        await activeTrack.applyConstraints({ advanced: [{ zoom: zoomValue }] });
-	        zoomValEl.textContent = zoomValue.toFixed(1) + "×";
-	      } catch (_) {}
-	    }
-
-	    function setButtonsDisabled(startDisabled, stopDisabled) {
-	      if (startBtn) startBtn.disabled = !!startDisabled;
-	      if (stopBtn) stopBtn.disabled = !!stopDisabled;
-	    }
-
-	    function enqueueOp(fn) {
-	      opChain = opChain.then(fn, fn);
-	      return opChain;
-	    }
-
-	    async function startInternal() {
-	      if (qr) return;
-	      assertSecureContextForCamera();
-	      setButtonsDisabled(true, true);
-	      let instance = null;
-
-	      try {
-	        await requestCameraPermission();
-	        const highSensitivity = !!highSensitivityEl?.checked;
-	        const scannerConfig = buildScannerConfig(highSensitivity);
-	        const cameraConstraints = buildCameraConstraints(highSensitivity);
-	        const onScanFailure = () => {};
-	        instance = new Html5Qrcode("reader");
-
-	        try {
-	          await instance.start(cameraConstraints, scannerConfig, onScanSuccess, onScanFailure);
-	        } catch (_) {
-	          const cams = await Html5Qrcode.getCameras();
-	          const backCam = cams.find(c => /back|rear/i.test(c.label)) || cams[0];
-	          await instance.start(backCam.id, scannerConfig, onScanSuccess, onScanFailure);
-	        }
-
-	        qr = instance;
-	        await applyVideoEnhancements();
-
-	        statusEl.textContent = "✅ Camera đã bật, đưa QR vào khung để quét";
-	      } catch (err) {
-	        // cố gắng dọn dẹp nếu html5-qrcode đang ở trạng thái chuyển tiếp
-	        qr = null;
-	        try { await instance?.stop?.(); } catch (_) {}
-	        try { await instance?.clear?.(); } catch (_) {}
-	        statusEl.textContent = "❌ Không mở được camera: " + formatErr(err);
-	      }
-	    }
-
-	    async function stopInternal() {
-	      const instance = qr;
-	      if (!instance) return;
-	      setButtonsDisabled(true, true);
-	      try {
-	        await instance.stop();
-	        await instance.clear();
-	      } finally {
-	        qr = null;
-	        activeTrack = null;
-	        if (zoomWrapEl) zoomWrapEl.hidden = true;
-	        statusEl.textContent = "Đã tắt camera";
-	      }
-	    }
-
-	    setButtonsDisabled(false, true);
-	    startBtn.onclick = () => enqueueOp(startInternal).finally(() => setButtonsDisabled(!!qr, !qr));
-	    stopBtn.onclick = () => enqueueOp(stopInternal).finally(() => setButtonsDisabled(!!qr, !qr));
-	    zoomEl?.addEventListener('input', (e) => setZoom(e.target.value));
-	  </script>
-	</body>
-	</html>
+    startBtn.onclick = start;
+    stopBtn.onclick = stop;
+  </script>
+</body>
+</html>
