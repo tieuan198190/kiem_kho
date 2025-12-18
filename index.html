@@ -414,6 +414,7 @@
             <button class="mini-btn" id="zoom1xBtn" type="button">1x</button>
             <button class="mini-btn" id="zoom2xBtn" type="button">2x</button>
             <button class="mini-btn" id="zoom3xBtn" type="button">3x</button>
+            <button class="mini-btn" id="autoZoomBtn" type="button">Auto zoom</button>
             <button class="mini-btn" id="torchBtn" type="button">Bật đèn</button>
           </div>
         </div>
@@ -466,6 +467,7 @@
     const zoom1xBtn = document.getElementById('zoom1xBtn');
     const zoom2xBtn = document.getElementById('zoom2xBtn');
     const zoom3xBtn = document.getElementById('zoom3xBtn');
+    const autoZoomBtn = document.getElementById('autoZoomBtn');
     const torchBtn = document.getElementById('torchBtn');
     let emptyRow = document.getElementById('emptyRow');
 
@@ -475,6 +477,11 @@
     let zoomCapabilities = null;
     let torchSupported = false;
     let torchOn = false;
+    let autoZoomOn = false;
+    let autoZoomLastDecodedAt = 0;
+    let autoZoomLastAdjustAt = 0;
+    let autoZoomFailStreak = 0;
+    let autoZoomLastFailAt = 0;
 
     // chống quét trùng do rung tay
     let lastCode = null;
@@ -495,7 +502,13 @@
         throw new Error("Trình duyệt không hỗ trợ camera.");
       }
       if (!isIosSafari || permissionGranted) return;
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } });
+      let stream = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: "environment" } } });
+      } catch {
+        // Some browsers reject `exact`; this is only for prompting permission.
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } });
+      }
       stream.getTracks().forEach(track => track.stop());
       permissionGranted = true;
     }
@@ -568,6 +581,8 @@
 
       lastCode = decodedText;
       lastTs = now;
+      autoZoomLastDecodedAt = now;
+      autoZoomFailStreak = 0;
 
       totalScans += 1;
       scanCountEl.textContent = totalScans + " dòng";
@@ -577,33 +592,123 @@
       sendToN8n(decodedText);
     }
 
+    function getBoundingBoxFromDecodedResult(decodedResult) {
+      const candidates = [
+        decodedResult?.result,
+        decodedResult,
+        decodedResult?.decodedResult,
+        decodedResult?.result?.decodedResult
+      ];
+
+      for (const c of candidates) {
+        const bb = c?.boundingBox || c?.result?.boundingBox;
+        if (bb && typeof bb.width === 'number' && typeof bb.height === 'number') return bb;
+
+        const pts = c?.cornerPoints || c?.result?.cornerPoints;
+        if (Array.isArray(pts) && pts.length >= 4) {
+          const xs = pts.map(p => p.x).filter(n => typeof n === 'number');
+          const ys = pts.map(p => p.y).filter(n => typeof n === 'number');
+          if (xs.length && ys.length) {
+            const minX = Math.min(...xs);
+            const maxX = Math.max(...xs);
+            const minY = Math.min(...ys);
+            const maxY = Math.max(...ys);
+            return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+          }
+        }
+      }
+      return null;
+    }
+
+    function onScanFailure(_errorMessage, decodedResult) {
+      if (!autoZoomOn || !zoomCapabilities || !qr) return;
+
+      const now = Date.now();
+      if (now - autoZoomLastFailAt > 700) autoZoomFailStreak = 0;
+      autoZoomLastFailAt = now;
+      autoZoomFailStreak += 1;
+
+      // Try box-guided zoom (if browser provides it even on failure).
+      const settings = qr.getRunningTrackSettings?.() || {};
+      const frameW = settings.width;
+      const bb = getBoundingBoxFromDecodedResult(decodedResult);
+      if (bb && typeof frameW === 'number' && frameW > 0) {
+        const ratio = bb.width / frameW; // how big QR is relative to frame
+        if (now - autoZoomLastAdjustAt > 450) {
+          const step = Math.max(parseFloat(zoomCapabilities.step || 0.1), 0.1);
+          const current = parseFloat(zoomSlider.value || zoomCapabilities.min);
+          if (ratio < 0.18) {
+            autoZoomLastAdjustAt = now;
+            zoomSlider.value = String(current + step * 3);
+            zoomSlider.dispatchEvent(new Event('input'));
+          } else if (ratio > 0.55) {
+            autoZoomLastAdjustAt = now;
+            zoomSlider.value = String(current - step * 2);
+            zoomSlider.dispatchEvent(new Event('input'));
+          }
+        }
+        return;
+      }
+
+      // Fallback: if we keep failing for a while, nudge zoom up gradually.
+      const noDecodeForMs = now - (autoZoomLastDecodedAt || now);
+      if (noDecodeForMs > 2200 && autoZoomFailStreak >= 18 && (now - autoZoomLastAdjustAt) > 900) {
+        autoZoomLastAdjustAt = now;
+        const step = Math.max(parseFloat(zoomCapabilities.step || 0.1), 0.1);
+        const current = parseFloat(zoomSlider.value || zoomCapabilities.min);
+        zoomSlider.value = String(current + step * 3);
+        zoomSlider.dispatchEvent(new Event('input'));
+      }
+    }
+
     async function start() {
       if (qr) return;
       qr = new Html5Qrcode("reader");
 
       try {
         await requestCameraPermission();
-        const cams = await Html5Qrcode.getCameras();
-        const backCam =
-          cams.find(c => /back|rear|environment/i.test(c.label)) ||
-          cams[cams.length - 1] ||
-          cams[0];
+        const baseConfig = {
+          fps: 15,
+          qrbox: { width: 220, height: 220 },
+          disableFlip: true,
+          experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+          videoConstraints: {
+            facingMode: { exact: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          }
+        };
 
-        await qr.start(
-          backCam.id,
-          {
-            fps: 15,
-            qrbox: { width: 220, height: 220 },
-            disableFlip: true,
-            experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+        // Force back camera (no front camera fallback).
+        try {
+          await qr.start({ facingMode: "environment" }, baseConfig, onScanSuccess, onScanFailure);
+        } catch (primaryErr) {
+          // Fallback: try an explicitly identified "back" camera by label.
+          const cams = await Html5Qrcode.getCameras();
+          const backCandidates = cams.filter(c => c.label && /back|rear|environment/i.test(c.label));
+          if (!backCandidates.length) throw primaryErr;
+
+          const fallbackConfig = {
+            ...baseConfig,
             videoConstraints: {
               facingMode: { ideal: "environment" },
               width: { ideal: 1920 },
               height: { ideal: 1080 }
             }
-          },
-          onScanSuccess
-        );
+          };
+
+          let lastErr = primaryErr;
+          for (const cam of backCandidates) {
+            try {
+              await qr.start(cam.id, fallbackConfig, onScanSuccess, onScanFailure);
+              lastErr = null;
+              break;
+            } catch (e) {
+              lastErr = e;
+            }
+          }
+          if (lastErr) throw lastErr;
+        }
 
         // Setup Zoom / Torch if supported
         try {
@@ -653,8 +758,23 @@
             setPressed(zoom1xBtn, true);
             setPressed(zoom2xBtn, false);
             setPressed(zoom3xBtn, false);
+
+            // Auto zoom assist (digital): increases zoom if QR remains too small / not detected.
+            autoZoomBtn.style.display = 'inline-flex';
+            autoZoomBtn.setAttribute('aria-pressed', 'false');
+            autoZoomOn = false;
+            autoZoomBtn.onclick = () => {
+              autoZoomOn = !autoZoomOn;
+              autoZoomBtn.setAttribute('aria-pressed', autoZoomOn ? 'true' : 'false');
+              autoZoomBtn.textContent = autoZoomOn ? "Auto zoom: ON" : "Auto zoom";
+              autoZoomFailStreak = 0;
+              autoZoomLastFailAt = 0;
+              autoZoomLastAdjustAt = 0;
+              autoZoomLastDecodedAt = Date.now();
+            };
           } else {
             zoomControls.style.display = 'none';
+            autoZoomBtn.style.display = 'none';
           }
 
           if (torchSupported) {
@@ -679,6 +799,7 @@
           console.log("Zoom/torch setup failed", e);
           zoomControls.style.display = 'none';
           torchBtn.style.display = 'none';
+          autoZoomBtn.style.display = 'none';
         }
 
         statusEl.textContent = "✅ Camera đã bật, đưa QR vào khung để quét";
@@ -695,6 +816,10 @@
         await qr.clear();
         zoomControls.style.display = 'none';
         torchBtn.style.display = 'none';
+        autoZoomBtn.style.display = 'none';
+        autoZoomBtn.textContent = "Auto zoom";
+        autoZoomBtn.setAttribute('aria-pressed', 'false');
+        autoZoomOn = false;
         torchBtn.textContent = "Bật đèn";
         torchBtn.setAttribute('aria-pressed', 'false');
         torchOn = false;
