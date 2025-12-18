@@ -439,6 +439,7 @@
 	    let activeTrack = null;
 	    let totalScans = 0;
 	    let feedbackTimer = null;
+	    let opChain = Promise.resolve();
 
     // chống quét trùng do rung tay
     let lastCode = null;
@@ -646,10 +647,21 @@
 	      } catch (_) {}
 	    }
 
-	    async function start() {
+	    function setButtonsDisabled(startDisabled, stopDisabled) {
+	      if (startBtn) startBtn.disabled = !!startDisabled;
+	      if (stopBtn) stopBtn.disabled = !!stopDisabled;
+	    }
+
+	    function enqueueOp(fn) {
+	      opChain = opChain.then(fn, fn);
+	      return opChain;
+	    }
+
+	    async function startInternal() {
 	      if (qr) return;
 	      assertSecureContextForCamera();
-	      qr = new Html5Qrcode("reader");
+	      setButtonsDisabled(true, true);
+	      let instance = null;
 
 	      try {
 	        await requestCameraPermission();
@@ -657,29 +669,36 @@
 	        const scannerConfig = buildScannerConfig(highSensitivity);
 	        const cameraConstraints = buildCameraConstraints(highSensitivity);
 	        const onScanFailure = () => {};
+	        instance = new Html5Qrcode("reader");
 
 	        try {
-	          await qr.start(cameraConstraints, scannerConfig, onScanSuccess, onScanFailure);
+	          await instance.start(cameraConstraints, scannerConfig, onScanSuccess, onScanFailure);
 	        } catch (_) {
 	          const cams = await Html5Qrcode.getCameras();
 	          const backCam = cams.find(c => /back|rear/i.test(c.label)) || cams[0];
-	          await qr.start(backCam.id, scannerConfig, onScanSuccess, onScanFailure);
+	          await instance.start(backCam.id, scannerConfig, onScanSuccess, onScanFailure);
 	        }
 
+	        qr = instance;
 	        await applyVideoEnhancements();
 
 	        statusEl.textContent = "✅ Camera đã bật, đưa QR vào khung để quét";
 	      } catch (err) {
-	        statusEl.textContent = "❌ Không mở được camera: " + formatErr(err);
+	        // cố gắng dọn dẹp nếu html5-qrcode đang ở trạng thái chuyển tiếp
 	        qr = null;
+	        try { await instance?.stop?.(); } catch (_) {}
+	        try { await instance?.clear?.(); } catch (_) {}
+	        statusEl.textContent = "❌ Không mở được camera: " + formatErr(err);
 	      }
 	    }
 
-	    async function stop() {
-	      if (!qr) return;
+	    async function stopInternal() {
+	      const instance = qr;
+	      if (!instance) return;
+	      setButtonsDisabled(true, true);
 	      try {
-	        await qr.stop();
-	        await qr.clear();
+	        await instance.stop();
+	        await instance.clear();
 	      } finally {
 	        qr = null;
 	        activeTrack = null;
@@ -688,8 +707,9 @@
 	      }
 	    }
 
-	    startBtn.onclick = start;
-	    stopBtn.onclick = stop;
+	    setButtonsDisabled(false, true);
+	    startBtn.onclick = () => enqueueOp(startInternal).finally(() => setButtonsDisabled(!!qr, !qr));
+	    stopBtn.onclick = () => enqueueOp(stopInternal).finally(() => setButtonsDisabled(!!qr, !qr));
 	    zoomEl?.addEventListener('input', (e) => setZoom(e.target.value));
 	  </script>
 	</body>
