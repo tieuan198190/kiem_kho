@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Quét QR kiểm kho</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fc;
+      --bg-accent: radial-gradient(circle at top, rgba(255, 255, 255, 0.9), transparent 60%);
+      --card: #ffffff;
+      --card-shadow: 0 20px 70px rgba(15, 23, 42, 0.08);
+      --border: #e4e7f1;
+      --text: #121826;
+      --muted: #6b7287;
+      --muted-2: #9aa1b7;
+      --primary: #121826;
+      --secondary: #f2f4fb;
+      --accent: #2f67ff;
+      --radius-lg: 26px;
+      --radius-md: 18px;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      background-image: var(--bg-accent);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      padding: clamp(20px, 5vw, 60px);
+    }
+
+    main {
+      width: min(1180px, 100%);
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .app-header {
+      border-radius: var(--radius-lg);
+      padding: clamp(26px, 4vw, 42px);
+      background: var(--card);
+      box-shadow: var(--card-shadow);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      margin-bottom: 20px;
+    }
+    .brand::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #121826;
+      box-shadow: 0 0 0 4px rgba(18, 24, 38, 0.08);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2rem, 6vw, 3.4rem);
+      font-weight: 700;
+    }
+    .app-header p {
+      margin: 12px 0 0;
+      color: var(--muted);
+      max-width: 520px;
+      font-size: 1rem;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: 0.92fr 1.08fr;
+      gap: 26px;
+    }
+    @media (max-width: 980px) {
+      .cards {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: var(--radius-lg);
+      padding: clamp(20px, 3vw, 32px);
+      box-shadow: var(--card-shadow);
+      border: 1px solid rgba(255, 255, 255, 0.8);
+    }
+    .card-title {
+      font-size: 1.35rem;
+      font-weight: 600;
+    }
+    .card-subtitle {
+      margin: 6px 0 18px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    #reader {
+      width: 100%;
+      border-radius: var(--radius-md);
+      border: 1px dashed var(--border);
+      min-height: clamp(280px, 32vw, 360px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted-2);
+      background: var(--secondary);
+      overflow: hidden;
+    }
+
+    .helper {
+      margin-top: 12px;
+      font-size: 0.9rem;
+      color: var(--muted-2);
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 22px;
+    }
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 12px 22px;
+      font-size: 0.98rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    button:active {
+      transform: scale(0.97);
+    }
+    #startBtn {
+      background: #121826;
+      color: #fff;
+      box-shadow: 0 12px 32px rgba(18, 24, 38, 0.2);
+    }
+    #stopBtn {
+      background: #fff;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .meta {
+      margin-top: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: var(--secondary);
+      font-weight: 500;
+    }
+    .count {
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .table-wrapper {
+      margin-top: 20px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.95rem;
+    }
+    thead {
+      background: #f5f6fb;
+      color: var(--muted);
+      font-size: 0.85rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    th, td {
+      padding: 14px 18px;
+      border-bottom: 1px solid #f0f2fb;
+      text-align: left;
+    }
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+    .table-empty {
+      text-align: center;
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    .status-bar {
+      margin-top: 18px;
+      border-radius: var(--radius-md);
+      padding: 14px 18px;
+      background: var(--secondary);
+      color: var(--accent);
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="app-header">
+      <div class="brand">Cô Mập Fashion</div>
+      <h1>Kiểm kho Cô Mập</h1>
+    </header>
+
+    <section class="cards">
+      <article class="card camera-card">
+        <div id="reader">Camera sẽ hiển thị ở đây sau khi bật.</div>
+        <div class="helper">Lưu ý Safari iPhone: cho phép quyền camera khi được hỏi, sau đó quay lại bấm “Bật camera”.</div>
+        <div class="controls">
+          <button id="startBtn">Bật camera</button>
+          <button id="stopBtn">Tắt camera</button>
+        </div>
+      </article>
+
+      <article class="card data-card">
+        <div class="card-title">Nhật ký quét</div>
+        <div class="meta">
+          <span class="pill">Lần quét gần nhất</span>
+          <span class="count" id="scanCount">0 dòng</span>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:70px">#</th>
+                <th>Mã QR</th>
+                <th>Thời gian</th>
+                <th>Ghi chú</th>
+              </tr>
+            </thead>
+            <tbody id="logBody">
+              <tr id="emptyRow">
+                <td class="table-empty" colspan="4">Chưa có dòng nào được thêm.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="status-bar" id="status">Chưa khởi động</div>
+      </article>
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <script>
+    const WEBHOOK_URL = "https://n8n-hongnhung198198-u40833.vm.elestio.app/webhook/kiem_khoCM";
+    const statusEl = document.getElementById('status');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const scanCountEl = document.getElementById('scanCount');
+    const logBody = document.getElementById('logBody');
+    let emptyRow = document.getElementById('emptyRow');
+
+    let qr = null;
+    let totalScans = 0;
+
+    // chống quét trùng do rung tay
+    let lastCode = null;
+    let lastTs = 0;
+    const DEDUPE_MS = 1200;
+
+    const isIosSafari = (() => {
+      const ua = navigator.userAgent;
+      const iOS = /iPad|iPhone|iPod/.test(ua) || (ua.includes('Mac') && 'ontouchend' in document);
+      const safari = /^((?!chrome|android).)*safari/i.test(ua);
+      return iOS && safari;
+    })();
+
+    let permissionGranted = false;
+
+    async function requestCameraPermission() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Trình duyệt không hỗ trợ camera.");
+      }
+      if (!isIosSafari || permissionGranted) return;
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } });
+      stream.getTracks().forEach(track => track.stop());
+      permissionGranted = true;
+    }
+
+    function addLogEntry(code) {
+      if (emptyRow) {
+        emptyRow.remove();
+        emptyRow = null;
+      }
+
+      const row = document.createElement('tr');
+      row.className = 'log-entry';
+
+      const idxCell = document.createElement('td');
+      idxCell.textContent = totalScans;
+
+      const codeCell = document.createElement('td');
+      codeCell.textContent = code;
+
+      const timeCell = document.createElement('td');
+      timeCell.textContent = new Date().toLocaleString('vi-VN');
+
+      const noteCell = document.createElement('td');
+      noteCell.textContent = "Đã gửi n8n";
+
+      row.appendChild(idxCell);
+      row.appendChild(codeCell);
+      row.appendChild(timeCell);
+      row.appendChild(noteCell);
+
+      if (logBody.firstChild) {
+        logBody.insertBefore(row, logBody.firstChild);
+      } else {
+        logBody.appendChild(row);
+      }
+    }
+
+    async function sendToN8n(code) {
+      const payload = {
+        code,                          // nội dung QR
+        ts: new Date().toISOString(),  // thời gian quét
+        source: "iphone-web-qr",
+      };
+
+      try {
+        statusEl.textContent = "Đang gửi...";
+        const res = await fetch(WEBHOOK_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        statusEl.textContent = res.ok ? "✅ Gửi OK" : ("❌ Lỗi HTTP: " + res.status);
+      } catch (e) {
+        statusEl.textContent = "❌ Không gửi được: " + e.message;
+      }
+    }
+
+    function onScanSuccess(decodedText) {
+      const now = Date.now();
+      if (decodedText === lastCode && (now - lastTs) < DEDUPE_MS) return;
+
+      lastCode = decodedText;
+      lastTs = now;
+
+      totalScans += 1;
+      scanCountEl.textContent = totalScans + " dòng";
+      addLogEntry(decodedText);
+
+      sendToN8n(decodedText);
+    }
+
+    async function start() {
+      if (qr) return;
+      qr = new Html5Qrcode("reader");
+
+      try {
+        await requestCameraPermission();
+        const cams = await Html5Qrcode.getCameras();
+        const backCam = cams.find(c => /back|rear/i.test(c.label)) || cams[0];
+
+        await qr.start(
+          backCam.id,
+          { fps: 12, qrbox: { width: 260, height: 260 } },
+          onScanSuccess
+        );
+
+        statusEl.textContent = "✅ Camera đã bật, đưa QR vào khung để quét";
+      } catch (err) {
+        statusEl.textContent = "❌ Không mở được camera: " + err;
+        qr = null;
+      }
+    }
+
+    async function stop() {
+      if (!qr) return;
+      try {
+        await qr.stop();
+        await qr.clear();
+      } finally {
+        qr = null;
+        statusEl.textContent = "Đã tắt camera";
+      }
+    }
+
+    startBtn.onclick = start;
+    stopBtn.onclick = stop;
+  </script>
+</body>
+</html>
