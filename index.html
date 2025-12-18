@@ -323,6 +323,42 @@
       font-weight: 600;
       border: 1px solid var(--border);
     }
+
+    .zoom-controls {
+      display: none;
+      margin-top: 16px;
+      padding: 0 4px;
+      animation: fadeUp 0.4s ease;
+    }
+    .zoom-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      background: transparent;
+      cursor: pointer;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 20px;
+      width: 20px;
+      border-radius: 50%;
+      background: var(--primary);
+      margin-top: -8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    input[type=range]::-webkit-slider-runnable-track {
+      width: 100%;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+    }
   </style>
 </head>
 <body>
@@ -341,6 +377,14 @@
             <div class="check-circle">✓</div>
             <div>Đã quét xong</div>
           </div>
+        </div>
+        <div class="zoom-controls" id="zoomControls">
+          <div class="zoom-label">
+            <span>1x</span>
+            <span>Zoom</span>
+            <span>Max</span>
+          </div>
+          <input type="range" id="zoomSlider" min="1" max="5" step="0.1">
         </div>
         <div class="helper">Lưu ý Safari iPhone: cho phép quyền camera khi được hỏi, sau đó quay lại bấm “Bật camera”.</div>
         <div class="controls">
@@ -386,6 +430,8 @@
     const scanCountEl = document.getElementById('scanCount');
     const logBody = document.getElementById('logBody');
     const scanFeedback = document.getElementById('scanFeedback');
+    const zoomControls = document.getElementById('zoomControls');
+    const zoomSlider = document.getElementById('zoomSlider');
     let emptyRow = document.getElementById('emptyRow');
 
     let qr = null;
@@ -508,6 +554,28 @@
           onScanSuccess
         );
 
+        // Setup Zoom if supported
+        try {
+          const capabilities = qr.getRunningTrackCameraCapabilities();
+          const settings = qr.getRunningTrackSettings();
+          
+          if (capabilities.zoom) {
+            zoomControls.style.display = 'block';
+            zoomSlider.min = capabilities.zoom.min;
+            zoomSlider.max = capabilities.zoom.max;
+            zoomSlider.step = capabilities.zoom.step;
+            zoomSlider.value = settings.zoom || capabilities.zoom.min;
+            
+            zoomSlider.oninput = () => {
+              qr.applyVideoConstraints({
+                advanced: [{ zoom: parseFloat(zoomSlider.value) }]
+              });
+            };
+          }
+        } catch (e) {
+          console.log("Zoom setup failed", e);
+        }
+
         statusEl.textContent = "✅ Camera đã bật, đưa QR vào khung để quét";
       } catch (err) {
         statusEl.textContent = "❌ Không mở được camera: " + err;
@@ -520,6 +588,7 @@
       try {
         await qr.stop();
         await qr.clear();
+        zoomControls.style.display = 'none';
       } finally {
         qr = null;
         statusEl.textContent = "Đã tắt camera";
