@@ -193,6 +193,11 @@
       color: var(--text);
       border: 1px solid var(--border);
     }
+    #manualBtn {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 12px 25px rgba(29, 63, 255, 0.18);
+    }
 
     .meta {
       margin-top: 10px;
@@ -324,6 +329,74 @@
       border: 1px solid var(--border);
     }
 
+    .modal {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(15, 23, 42, 0.42);
+      z-index: 50;
+    }
+    .modal[hidden] {
+      display: none;
+    }
+    .modal-card {
+      width: min(520px, 100%);
+      background: var(--card);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--card-shadow);
+      border: 1px solid var(--border);
+      padding: 18px;
+      animation: cardPop 0.5s ease both;
+    }
+    .modal-title {
+      font-weight: 700;
+      font-size: 1.05rem;
+      margin: 0 0 6px;
+    }
+    .modal-subtitle {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .field input[type="text"] {
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      padding: 12px 14px;
+      font-size: 1rem;
+      outline: none;
+    }
+    .field input[type="text"]:focus {
+      border-color: rgba(29, 63, 255, 0.45);
+      box-shadow: 0 0 0 4px rgba(29, 63, 255, 0.12);
+    }
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+    .btn-ghost {
+      background: #fff;
+      color: var(--text);
+      border: 1px solid var(--border);
+      box-shadow: 0 10px 18px rgba(15, 23, 42, 0.08);
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 12px 25px rgba(15, 23, 42, 0.2);
+    }
+
     .zoom-controls {
       display: none;
       margin-top: 16px;
@@ -422,6 +495,7 @@
         <div class="controls">
           <button id="startBtn">Bật camera</button>
           <button id="stopBtn">Tắt camera</button>
+          <button id="manualBtn" type="button">Nhập thủ công</button>
         </div>
       </article>
 
@@ -453,6 +527,20 @@
     </section>
   </main>
 
+  <div class="modal" id="manualModal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="manualTitle">
+      <h2 class="modal-title" id="manualTitle">Nhập mã thủ công</h2>
+      <p class="modal-subtitle">Dùng khi QR quá nhỏ/khó quét. Dán hoặc gõ nội dung mã rồi bấm Gửi.</p>
+      <div class="field">
+        <input id="manualInput" type="text" inputmode="text" autocomplete="off" placeholder="Ví dụ: A512-M" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="manualCancelBtn" type="button">Hủy</button>
+        <button class="btn-primary" id="manualSubmitBtn" type="button">Gửi</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://unpkg.com/html5-qrcode"></script>
   <script>
     const WEBHOOK_URL = "https://n8n-hongnhung198198-u40833.vm.elestio.app/webhook/kiem_khoCM";
@@ -469,6 +557,11 @@
     const zoom3xBtn = document.getElementById('zoom3xBtn');
     const autoZoomBtn = document.getElementById('autoZoomBtn');
     const torchBtn = document.getElementById('torchBtn');
+    const manualBtn = document.getElementById('manualBtn');
+    const manualModal = document.getElementById('manualModal');
+    const manualInput = document.getElementById('manualInput');
+    const manualCancelBtn = document.getElementById('manualCancelBtn');
+    const manualSubmitBtn = document.getElementById('manualSubmitBtn');
     let emptyRow = document.getElementById('emptyRow');
 
     let qr = null;
@@ -513,7 +606,7 @@
       permissionGranted = true;
     }
 
-    function addLogEntry(code) {
+    function addLogEntry(code, note = "Đã gửi") {
       if (emptyRow) {
         emptyRow.remove();
         emptyRow = null;
@@ -532,7 +625,7 @@
       timeCell.textContent = new Date().toLocaleString('vi-VN');
 
       const noteCell = document.createElement('td');
-      noteCell.textContent = "Đã gửi";
+      noteCell.textContent = note;
 
       row.appendChild(idxCell);
       row.appendChild(codeCell);
@@ -586,10 +679,54 @@
 
       totalScans += 1;
       scanCountEl.textContent = totalScans + " dòng";
-      addLogEntry(decodedText);
+      addLogEntry(decodedText, "Đã gửi");
       showScanFeedback();
 
       sendToN8n(decodedText);
+    }
+
+    function openManualModal() {
+      manualModal.hidden = false;
+      manualInput.value = "";
+      statusEl.textContent = "Nhập mã thủ công...";
+      setTimeout(() => manualInput.focus(), 0);
+    }
+
+    function closeManualModal() {
+      manualModal.hidden = true;
+      manualBtn.focus();
+    }
+
+    function submitManual() {
+      const code = (manualInput.value || "").trim();
+      if (!code) {
+        statusEl.textContent = "❌ Vui lòng nhập mã trước khi gửi";
+        manualInput.focus();
+        return;
+      }
+
+      totalScans += 1;
+      scanCountEl.textContent = totalScans + " dòng";
+      addLogEntry(code, "Nhập tay");
+      showScanFeedback();
+
+      // gửi cùng webhook, phân biệt nguồn
+      (async () => {
+        const payload = { code, ts: new Date().toISOString(), source: "manual" };
+        try {
+          statusEl.textContent = "Đang gửi...";
+          const res = await fetch(WEBHOOK_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+          statusEl.textContent = res.ok ? "✅ Gửi OK" : ("❌ Lỗi HTTP: " + res.status);
+        } catch (e) {
+          statusEl.textContent = "❌ Không gửi được: " + e.message;
+        }
+      })();
+
+      closeManualModal();
     }
 
     function getBoundingBoxFromDecodedResult(decodedResult) {
@@ -831,6 +968,18 @@
 
     startBtn.onclick = start;
     stopBtn.onclick = stop;
+    manualBtn.onclick = openManualModal;
+    manualCancelBtn.onclick = closeManualModal;
+    manualSubmitBtn.onclick = submitManual;
+
+    manualModal.addEventListener('click', (e) => {
+      if (e.target === manualModal) closeManualModal();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (manualModal.hidden) return;
+      if (e.key === 'Escape') closeManualModal();
+      if (e.key === 'Enter') submitManual();
+    });
   </script>
 </body>
 </html>
